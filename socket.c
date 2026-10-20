@@ -37,7 +37,7 @@ int main() {
         return 1;
     }
 
-    printf("Successfully bound to port 8080!\n");
+    printf("Successfully bound to port 8000!\n");
 
     if (listen(sock_fd, BACKLOG) < 0) {
         printf("Listen failed!\n");
