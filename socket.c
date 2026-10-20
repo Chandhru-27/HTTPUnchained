@@ -39,6 +39,13 @@ int main() {
 
     printf("Successfully bound to port 8080!\n");
 
+    if (listen(sock_fd, BACKLOG) < 0) {
+        printf("Listen failed!\n");
+        return 1;
+    }
+
+    printf("Server is now listening on port 8000... Waiting room queue set to %d.\n",BACKLOG);
+
     close(sock_fd);
 
     return 0;
