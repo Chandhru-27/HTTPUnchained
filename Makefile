@@ -6,14 +6,14 @@ compile:
 
 scompile:
 	gcc -std=c11 -Wall -Wextra -Wpedantic \
-    -Iinclude src/main.c src/server.c \
+    -Iinclude src/main.c src/server.c src/http.c \
     -o output/a.out
 
 run:
 	./output/a.out
 	
 test:
-	printf 'GET /products/42 HTTP/1.1\r\nHost: localhost:8000\r\n\r\n' | nc 127.0.0.1 8000
+	printf 'GET / HTTP/1.1\r\nHost: localhost:8000\r\n\r\n' | nc 127.0.0.1 8000
 
 kill-port:
 	fuser -k 8000/tcp
