@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <unistd.h>
 
 #include "config.h"
 
@@ -32,7 +31,6 @@ int net_bind_serversock(int serversock_fd) {
   if (bind(serversock_fd, (struct sockaddr*)&server_address,
            sizeof(server_address)) < 0) {
     perror("Bind failed! The port might already be in use.");
-    close(serversock_fd);
     return -1;
   }
 
@@ -43,7 +41,6 @@ int net_bind_serversock(int serversock_fd) {
 int net_listen_on_serversock(int serversock_fd) {
   if (listen(serversock_fd, BACKLOG) < 0) {
     perror("Listen failed!");
-    close(serversock_fd);
     return -1;
   }
 
