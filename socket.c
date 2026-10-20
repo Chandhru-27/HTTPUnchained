@@ -46,6 +46,17 @@ int main() {
 
     printf("Server is now listening on port 8000... Waiting room queue set to %d.\n",BACKLOG);
 
+    socklen_t addrlen = sizeof(address);
+    int nsock_fd = accept(sock_fd, (struct sockaddr *)&address, &addrlen);
+
+    if (nsock_fd < 0) {
+        printf("Accept failed!\n");
+        return 1;
+    }
+    
+    printf("Connection accepted! A client has successfully connected to us.\n");
+
+    close(nsock_fd);
     close(sock_fd);
 
     return 0;
