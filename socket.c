@@ -32,6 +32,13 @@ int main() {
     printf("The address: Listening on = %s:%d\n", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
 
     
+    if (bind(sock_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        printf("Bind failed! The port might already be in use.\n");
+        return 1;
+    }
+
+    printf("Successfully bound to port 8080!\n");
+
     close(sock_fd);
 
     return 0;
