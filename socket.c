@@ -56,6 +56,49 @@ int main() {
     
     printf("Connection accepted! A client has successfully connected to us.\n");
 
+    char buffer[1024];
+    size_t total_received = 0;
+
+    while (true) {
+        if (total_received >= 1023) {
+            printf("Payload too heavy: Buffer overloaded!\n");
+            return 1;
+        }
+
+        ssize_t bytes_read = recv(nsock_fd, buffer + total_received, sizeof(buffer) - total_received - 1, 0);
+
+        if (bytes_read < 0) {
+            printf("Failed to recieve from client!\n");
+            return 1;    
+        } else if (bytes_read == 0) {
+            printf("Orderly shutdown: Client disconnected!\n");
+            return 1;
+        } 
+
+        total_received += bytes_read;
+
+        buffer[total_received] = '\0';
+
+        char *end = strstr(buffer, "\r\n\r\n");
+
+        if (end != NULL) {
+            printf("End of HTTP headers found!\n");
+            break;
+        }
+    } 
+    
+    printf("Received from client: %s\n", buffer);
+
+    char *reply = "Message received loud and clear!\n";
+
+    ssize_t bytes_sent = send(nsock_fd, reply, strlen(reply), 0);
+
+    if (bytes_sent < 0) {
+        printf("Failed to send data to client!\n");
+        return 1;
+    }
+
+    printf("Reply sent successfully.\n");
     close(nsock_fd);
     close(sock_fd);
 
