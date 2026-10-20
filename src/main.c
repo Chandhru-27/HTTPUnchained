@@ -1,5 +1,7 @@
 #include <stdio.h>
+#include <unistd.h>
 
+#include "http.h"
 #include "server.h"
 
 int main() {
@@ -10,16 +12,35 @@ int main() {
   }
 
   if (net_bind_serversock(serversock_fd) < 0) {
+    close(serversock_fd);
     return 1;
   }
 
   if (net_listen_on_serversock(serversock_fd) < 0) {
+    close(serversock_fd);
     return 1;
   }
 
-  if (net_create_clientsock(serversock_fd) < 0) {
+  int clientsock_fd = net_create_clientsock(serversock_fd);
+
+  if (clientsock_fd < 0) {
+    close(serversock_fd);
     return 1;
   }
 
+  if (http_receive_request(clientsock_fd) < 0) {
+    close(clientsock_fd);
+    close(serversock_fd);
+    return 1;
+  }
+
+  if (http_send_response(clientsock_fd) < 0) {
+    close(clientsock_fd);
+    close(serversock_fd);
+    return 1;
+  }
+
+  close(clientsock_fd);
+  close(serversock_fd);
   return 0;
 }
