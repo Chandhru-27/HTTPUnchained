@@ -17,6 +17,15 @@ int net_create_serversock(void) {
   }
 
   printf("Socket succesfully created with descriptior: %d\n", serversock_fd);
+
+  int opt = 1;
+  if (setsockopt(serversock_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) <
+      0) {
+    perror("setsocketopt SO_REUSEADDR failed");
+    return -1;
+  }
+
+  printf("Port reuse enabled successfully.\n");
   return serversock_fd;
 }
 
