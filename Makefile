@@ -2,7 +2,7 @@ setup:
 	mkdir output
 
 compile:
-	gcc socket.c -o ./output/a.out
+	gcc -Iinclude src/*.c -o ./output/a.out
 
 scompile:
 	gcc -std=c11 -Wall -Wextra -Wpedantic \
