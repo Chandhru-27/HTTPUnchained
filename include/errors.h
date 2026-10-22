@@ -3,7 +3,7 @@
 
 #include <stdlib.h>
 
-#define STATUS_EXEC_ERROR -1
+#define STATUS_FATAL_ERROR -1
 #define STATUS_EXIT_FAILURE EXIT_FAILURE
 
 #define STATUS_EXEC_SUCCESS 0
