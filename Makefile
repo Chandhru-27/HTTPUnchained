@@ -6,7 +6,7 @@ compile:
 
 scompile:
 	gcc -std=c11 -Wall -Wextra -Wpedantic \
-    -Iinclude src/main.c src/server.c src/http.c \
+    -Iinclude src/*.c \
     -o output/a.out
 
 run:
