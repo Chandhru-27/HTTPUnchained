@@ -7,13 +7,14 @@
 #include <sys/socket.h>
 
 #include "config.h"
+#include "errors.h"
 
 int net_create_serversock(void) {
   int serversock_fd = socket(AF_INET, SOCK_STREAM, 0);
 
   if (serversock_fd < 0) {
     perror("Socket creation failed!");
-    return -1;
+    return STATUS_FATAL_ERROR;
   }
 
   printf("Socket succesfully created with descriptior: %d\n", serversock_fd);
@@ -22,7 +23,7 @@ int net_create_serversock(void) {
   if (setsockopt(serversock_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) <
       0) {
     perror("setsocketopt SO_REUSEADDR failed");
-    return -1;
+    return STATUS_FATAL_ERROR;
   }
 
   printf("Port reuse enabled successfully.\n");
@@ -40,23 +41,23 @@ int net_bind_serversock(int serversock_fd) {
   if (bind(serversock_fd, (struct sockaddr*)&server_address,
            sizeof(server_address)) < 0) {
     perror("Bind failed! The port might already be in use.");
-    return -1;
+    return STATUS_FATAL_ERROR;
   }
 
   printf("Successfully bound to port %d!\n", PORT);
-  return 0;
+  return STATUS_EXEC_SUCCESS;
 }
 
 int net_listen_on_serversock(int serversock_fd) {
   if (listen(serversock_fd, BACKLOG) < 0) {
     perror("Listen failed!");
-    return -1;
+    return STATUS_FATAL_ERROR;
   }
 
   printf(
       "Server is now listening on port %d... Waiting room queue set to %d.\n",
       PORT, BACKLOG);
-  return 0;
+  return STATUS_EXEC_SUCCESS;
 }
 
 int net_create_clientsock(int serversock_fd) {
@@ -68,7 +69,7 @@ int net_create_clientsock(int serversock_fd) {
 
   if (clientsock_fd < 0) {
     perror("Accept failed!");
-    return -1;
+    return STATUS_FATAL_ERROR;
   }
 
   printf("Client connected: %s:%d\n", inet_ntoa(client_address.sin_addr),
