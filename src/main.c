@@ -28,7 +28,10 @@ int main() {
     return 1;
   }
 
-  if (http_receive_request(clientsock_fd) < 0) {
+  char raw_request[HTTP_MAX_REQUEST_SIZE + 1];
+  size_t request_length = 0;
+  if (http_receive_request(clientsock_fd, raw_request, sizeof(raw_request),
+                           &request_length) < 0) {
     close(clientsock_fd);
     close(serversock_fd);
     return 1;
