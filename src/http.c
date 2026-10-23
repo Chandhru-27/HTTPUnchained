@@ -1,6 +1,7 @@
 #include "http.h"
 
 #include <errno.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,8 +9,8 @@
 
 #include "errors.h"
 
-int http_receive_request(int clientsock_fd, char* buffer, size_t capacity,
-                         size_t* request_length) {
+int8_t http_receive_request(int clientsock_fd, char* buffer, size_t capacity,
+                            size_t* request_length) {
   if (buffer == NULL || request_length == NULL || capacity < 4)
     return STATUS_FATAL_ERROR;
 
@@ -47,8 +48,8 @@ int http_receive_request(int clientsock_fd, char* buffer, size_t capacity,
   return STATUS_FATAL_ERROR;
 }
 
-int http_parse_request_line(const char* buffer, size_t request_length,
-                            HttpRequest* request) {
+int8_t http_parse_request_line(const char* buffer, size_t request_length,
+                               HttpRequest* request) {
   if (buffer == NULL || request == NULL || request_length == 0 ||
       request_length > HTTP_MAX_REQUEST_SIZE)
     return STATUS_FATAL_ERROR;
@@ -84,7 +85,7 @@ int http_parse_request_line(const char* buffer, size_t request_length,
   return STATUS_EXEC_SUCCESS;
 }
 
-int http_send_response(int clientsock_fd) {
+int8_t http_send_response(int clientsock_fd) {
   const char* body = "Message received loud and clear!\n";
   size_t body_length = strlen(body);
 
