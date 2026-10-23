@@ -2,6 +2,7 @@
 #define HTTP_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #define HTTP_MAX_HEADERS 32
 #define HTTP_MAX_HEADER_KEY_SIZE 64
@@ -25,10 +26,10 @@ typedef struct {
   HttpHeader headers[HTTP_MAX_HEADERS];
 } HttpRequest;
 
-int http_receive_request(int clientsock_fd, char* buffer, size_t capacity,
-                         size_t* request_length);
-int http_parse_request_line(const char* buffer, size_t request_length,
-                            HttpRequest* request);
-int http_send_response(int clientsock_fd);
+int8_t http_receive_request(int clientsock_fd, char* buffer, size_t capacity,
+                            size_t* request_length);
+int8_t http_parse_request_line(const char* buffer, size_t request_length,
+                               HttpRequest* request);
+int8_t http_send_response(int clientsock_fd);
 
 #endif
