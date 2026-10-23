@@ -16,6 +16,8 @@ typedef struct {
 
 int http_receive_request(int clientsock_fd, char* buffer, size_t capacity,
                          size_t* request_length);
+int http_parse_request_line(const char* buffer, size_t request_length,
+                            HttpRequest* request);
 int http_send_response(int clientsock_fd);
 
 #endif
