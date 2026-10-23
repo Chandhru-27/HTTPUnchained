@@ -49,6 +49,17 @@ int main(void) {
   printf("Method: %s\nTarget: %s\nVersion: %s\n", request.method,
          request.target, request.version);
 
+  if (http_parse_headers(raw_request, request_length, &request) < 0) {
+    close(clientsock_fd);
+    close(serversock_fd);
+    return STATUS_EXIT_FAILURE;
+  }
+
+  for (size_t i = 0; i < request.header_count; i++) {
+    printf("Header: %s: %s\n", request.headers[i].key,
+           request.headers[i].value);
+  }
+
   if (http_send_response(clientsock_fd) < 0) {
     close(clientsock_fd);
     close(serversock_fd);

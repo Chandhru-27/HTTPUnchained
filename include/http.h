@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <unistd.h>
 
 #define HTTP_MAX_HEADERS 32
 #define HTTP_MAX_HEADER_KEY_SIZE 64
@@ -23,6 +24,7 @@ typedef struct {
   char target[HTTP_MAX_TARGET_SIZE];
   char version[HTTP_MAX_VERSION_SIZE];
 
+  size_t header_count;
   HttpHeader headers[HTTP_MAX_HEADERS];
 } HttpRequest;
 
