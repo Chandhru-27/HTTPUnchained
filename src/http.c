@@ -2,12 +2,16 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 
+#include "errors.h"
+
 int http_receive_request(int clientsock_fd, char* buffer, size_t capacity,
                          size_t* request_length) {
-  if (buffer == NULL || request_length == NULL || capacity < 4) return -1;
+  if (buffer == NULL || request_length == NULL || capacity < 4)
+    return STATUS_FATAL_ERROR;
 
   buffer[0] = '\0';
   *request_length = 0;
@@ -21,12 +25,12 @@ int http_receive_request(int clientsock_fd, char* buffer, size_t capacity,
       if (errno == EINTR) continue;
 
       perror("recv failed");
-      return -1;
+      return STATUS_FATAL_ERROR;
     }
 
     if (bytes_read == 0) {
       printf("Client disconnected before headers completed.\n");
-      return -1;
+      return STATUS_FATAL_ERROR;
     }
 
     total_received += (size_t)bytes_read;
@@ -35,12 +39,49 @@ int http_receive_request(int clientsock_fd, char* buffer, size_t capacity,
     if (strstr(buffer, "\r\n\r\n") != NULL) {
       *request_length = total_received;
       printf("Received from client:\n%s\n", buffer);
-      return 0;
+      return STATUS_EXEC_SUCCESS;
     }
   }
 
   fprintf(stderr, "Request headers exceed buffer capacity.\n");
-  return -1;
+  return STATUS_FATAL_ERROR;
+}
+
+int http_parse_request_line(const char* buffer, size_t request_length,
+                            HttpRequest* request) {
+  if (buffer == NULL || request == NULL || request_length == 0 ||
+      request_length > HTTP_MAX_REQUEST_SIZE)
+    return STATUS_FATAL_ERROR;
+
+  const char* line_end = strstr(buffer, "\r\n");
+
+  if (line_end == NULL || (size_t)(line_end - buffer) >= request_length)
+    return STATUS_FATAL_ERROR;
+
+  size_t line_length = (size_t)(line_end - buffer);
+  char line[HTTP_MAX_REQUEST_SIZE + 1];
+
+  if (line_length >= sizeof(line)) {
+    return STATUS_FATAL_ERROR;
+  }
+
+  memcpy(line, buffer, line_length);
+  line[line_length] = '\0';
+
+  char extra;
+  int fields = sscanf(line, "%15s %2047s %15s %c", request->method,
+                      request->target, request->version, &extra);
+
+  if (fields != 3) {
+    return STATUS_FATAL_ERROR;
+  }
+
+  if (strcmp(request->version, "HTTP/1.1") != 0 &&
+      strcmp(request->version, "HTTP/1.0") != 0) {
+    return STATUS_FATAL_ERROR;
+  }
+
+  return STATUS_EXEC_SUCCESS;
 }
 
 int http_send_response(int clientsock_fd) {
@@ -58,7 +99,7 @@ int http_send_response(int clientsock_fd) {
 
   if (header_length < 0 || (size_t)header_length >= sizeof(headers)) {
     fprintf(stderr, "Failed to construct HTTP headers.\n");
-    return -1;
+    return STATUS_FATAL_ERROR;
   }
 
   size_t total_sent = 0;
@@ -68,12 +109,12 @@ int http_send_response(int clientsock_fd) {
 
     if (bytes_sent < 0) {
       perror("Headers: send failed");
-      return -1;
+      return STATUS_FATAL_ERROR;
     }
 
     if (bytes_sent == 0) {
       fprintf(stderr, "Headers: send returned zero bytes.\n");
-      return -1;
+      return STATUS_FATAL_ERROR;
     }
 
     total_sent += (size_t)bytes_sent;
@@ -86,17 +127,17 @@ int http_send_response(int clientsock_fd) {
 
     if (bytes_sent < 0) {
       perror("Body: send failed");
-      return -1;
+      return STATUS_FATAL_ERROR;
     }
 
     if (bytes_sent == 0) {
       fprintf(stderr, "Body: send returned zero bytes.\n");
-      return -1;
+      return STATUS_FATAL_ERROR;
     }
 
     total_sent += (size_t)bytes_sent;
   }
 
   printf("Reply sent successfully.\n");
-  return 0;
+  return STATUS_EXEC_SUCCESS;
 }
