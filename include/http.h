@@ -30,6 +30,8 @@ int8_t http_receive_request(int clientsock_fd, char* buffer, size_t capacity,
                             size_t* request_length);
 int8_t http_parse_request_line(const char* buffer, size_t request_length,
                                HttpRequest* request);
+int8_t http_parse_headers(const char* buffer, size_t request_length,
+                          HttpRequest* request);
 int8_t http_send_response(int clientsock_fd);
 
 #endif
