@@ -1,196 +1,476 @@
 # HTTPUnchained
 
-A small HTTP server written in C, being developed from a minimal TCP-socket
-prototype toward a bounded, tested HTTP/1.1 server with request routing and JSON
-support. The repository is currently an early learning-stage prototype; it is
-not production-ready and does not yet implement the HTTP/1.1 feature set below.
+HTTPUnchained is a small HTTP server written in C, being developed from
+a minimal TCP-socket prototype into a bounded, tested HTTP/1.1 server
+with request routing and JSON request-body support.
+
+> **Project status:** Early learning-stage implementation. The current
+> server is not production-ready and does not yet implement the full
+> HTTP/1.1 target described below. Progress labels distinguish code that
+> exists from behavior verified by tests.
 
 ## Target and specifications
 
-The target is a plaintext HTTP/1.1 server over TCP, with request routing and
-JSON request-body support. Protocol behavior is pinned to these specifications:
+The target is a plaintext HTTP/1.1 server over TCP, with request routing
+and JSON request-body support. Protocol behavior is guided by these
+specifications:
 
-| Specification | Scope |
-| --- | --- |
-| [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110) | HTTP semantics: methods, status codes, fields, and content semantics |
-| [RFC 9112](https://www.rfc-editor.org/rfc/rfc9112) | HTTP/1.1 message syntax, framing, connections, and request parsing |
-| [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) | JSON syntax and interoperability |
+  -----------------------------------------------------------------------------------
+  Specification                                   Scope
+  ----------------------------------------------- -----------------------------------
+  [RFC                                            HTTP semantics: methods, status
+  9110](https://www.rfc-editor.org/rfc/rfc9110)   codes, fields, and content
+                                                  semantics
+
+  [RFC                                            HTTP/1.1 message syntax, framing,
+  9112](https://www.rfc-editor.org/rfc/rfc9112)   connections, and request parsing
+
+  [RFC                                            JSON syntax and interoperability
+  8259](https://www.rfc-editor.org/rfc/rfc8259)   
+  -----------------------------------------------------------------------------------
 
 ### In scope
 
-- TCP server with bounded request/header/body sizes and configurable timeouts.
-- HTTP/1.1 request parsing, required `Host` validation, `Content-Length` and
-	chunked transfer coding, and rejection of ambiguous framing.
-- Persistent connections, sequential request handling and pipelining-safe
-	message boundaries, with correct partial-read and partial-write handling.
-- Method/path routing, `HEAD`, `OPTIONS`, `405 Method Not Allowed` with `Allow`,
-	and deliberate URI decoding and trailing-slash policies.
-- JSON body parsing with UTF-8, size, and nesting-depth validation; appropriate
-	`Content-Type` handling.
-- Clear error responses, operational logging, graceful shutdown, and test,
-	sanitizer, fuzz, and load-test workflows.
+-   TCP server with bounded request, header, and body sizes and
+    configurable timeouts.
+-   HTTP/1.1 request parsing, required `Host` validation,
+    `Content-Length` and chunked transfer coding, and rejection of
+    ambiguous framing.
+-   Persistent connections, sequential request handling, and
+    pipelining-safe message boundaries, with correct partial-read and
+    partial-write handling.
+-   Method/path routing, `HEAD`, `OPTIONS`, `405 Method Not Allowed`
+    with `Allow`, and deliberate URI decoding and trailing-slash
+    policies.
+-   JSON body parsing with UTF-8, size, and nesting-depth validation,
+    plus appropriate `Content-Type` handling.
+-   Clear error responses, operational logging, graceful shutdown, and
+    test, sanitizer, fuzz, and load-test workflows.
 
 ### Out of scope for this target
 
 TLS, HTTP/2, HTTP/3/QUIC, WebSockets, proxying, load balancing, caching,
-compression, and UDP application protocols. These can be considered as later,
+compression, and UDP application protocols. These may be considered as
 separate projects after the HTTP/1.1 target is complete.
 
-## Current implementation status
+## Progress dashboard
 
-The current program is a single-connection TCP prototype, not yet a complete
-HTTP server:
+Use this table as the current project tracker. "Implemented" means code
+has been written; it does not imply full RFC compliance or that all
+listed edge cases have been tested.
 
-- `src/server.c` creates an IPv4 TCP listening socket on `0.0.0.0:8000`, enables
-	`SO_REUSEADDR`, binds, listens, and accepts one client.
-- `src/main.c` accepts one connection, receives a request, parses its request
-	line, sends one response, then closes both sockets and exits.
-- `src/http.c` reads until it sees the end-of-headers marker or fills its
-	8 KiB-sized buffer. Its request-line parser recognizes method, target, and
-	HTTP/1.0 or HTTP/1.1 version. It does not parse or validate header fields,
-	message bodies, or framing.
-- The response is always a fixed `200 OK` plain-text response with
-	`Connection: close`; it is not selected by method or path.
-- `include/config.h` currently sets port `8000` and listen backlog `10`.
-	`include/http.h` defines fixed request-line field sizes and the 8192-byte
-	request buffer limit.
-- There are no router, JSON parser, automated unit tests, fuzz targets, CI
-	configuration, or runtime configuration yet.
+  ---------------------------------------------------------------------------------
+  Area / API                     Status                  Notes / remaining work
+  ------------------------------ ----------------------- --------------------------
+  `net_create_serversock()`      Implemented and         Creates the IPv4 TCP
+                                 manually exercised      listening socket.
 
-The Makefile provides `compile`, `scompile`, `run`, and `test` targets. The
-`scompile` target enables C11 and common warning flags, but does not currently
-make warnings fatal. The `test` target is only a netcat smoke request; it is
-not an assertion-based test suite and requires the server to be running in
-another terminal.
+  `net_bind_serversock()`        Implemented and         Binds to the configured
+                                 manually exercised      port; `SO_REUSEADDR` is
+                                                         enabled.
+
+  `net_listen_on_serversock()`   Implemented and         Starts listening with
+                                 manually exercised      configured backlog.
+
+  `net_create_clientsock()`      Implemented and         Accepts one client
+                                 manually exercised      connection. No
+                                                         multi-client loop yet.
+
+  `http_receive_request()`       Implemented and         Bounded receive into a
+                                 manually exercised      buffer; reads until the
+                                                         header terminator or the
+                                                         buffer/read condition
+                                                         ends. Must preserve any
+                                                         body or subsequent-request
+                                                         bytes already read.
+
+  `http_parse_request_line()`    Implemented and         Extracts method, target,
+                                 manually exercised      and version; strict
+                                                         grammar and complete
+                                                         malformed-input coverage
+                                                         remain to be verified.
+
+  `http_parse_headers()`         Implemented; six manual Parses bounded header
+                                 cases passed            names/values and rejects
+                                                         malformed headers and
+                                                         excess headers. Full
+                                                         protocol semantics and
+                                                         structured error mapping
+                                                         remain.
+
+  `http_get_header()`            Implemented             Case-insensitive lookup
+                                                         returning the first
+                                                         matching value. It cannot
+                                                         detect duplicates; callers
+                                                         needing duplicate
+                                                         detection must scan all
+                                                         headers.
+
+  `http_validate_host()`         Implemented; tests      Checks HTTP/1.0 vs
+                                 pending                 HTTP/1.1 and, for
+                                                         HTTP/1.1, requires exactly
+                                                         one
+                                                         non-empty/non-whitespace
+                                                         `Host` value. Full
+                                                         authority syntax
+                                                         validation and proper HTTP
+                                                         error mapping remain.
+
+  `http_send_response()`         Implemented and         Sends a basic `200 OK`
+                                 manually exercised      text response with
+                                                         `Content-Length` and
+                                                         `Connection: close`;
+                                                         response selection and
+                                                         complete HTTP semantics
+                                                         are not implemented.
+
+  `Content-Length` validation    Not started             Detect duplicates, invalid
+                                                         decimal syntax, overflow,
+                                                         and framing conflicts.
+
+  `Transfer-Encoding` validation Not started             Validate coding rules,
+  / chunked decoding                                     decode chunks, enforce
+                                                         limits, and reject
+                                                         ambiguous framing.
+
+  Request-body reader / framing  Not started             Consume exactly one body,
+  API                                                    handle truncation and
+                                                         partial reads, and
+                                                         preserve bytes after the
+                                                         current message.
+
+  Header semantic validation     Not started             Add relevant checks such
+  beyond `Host`                                          as `Content-Type`,
+                                                         `Expect`, and connection
+                                                         semantics as scope
+                                                         requires.
+
+  Router and method semantics    Not started             Route
+                                                         registration/matching,
+                                                         `404`, `405` plus `Allow`,
+                                                         `HEAD`, and `OPTIONS`.
+
+  JSON support                   Not started             RFC 8259 parsing, UTF-8,
+                                                         content type, size, and
+                                                         nesting-depth limits.
+
+  Persistent connections /       Not started             Sequential requests,
+  pipelining                                             deterministic connection
+                                                         policy, and safe message
+                                                         boundaries.
+
+  Structured HTTP error          Not started             Map parser/validation
+  responses                                              failures to appropriate
+                                                         statuses such as `400`,
+                                                         `411`, `413`, `414`,
+                                                         `415`, `431`, and `505`.
+
+  Timeouts / graceful shutdown / Not started or partial  Add explicit runtime
+  logging                                                policy, bounded resource
+                                                         use, useful logs, and
+                                                         signal-driven shutdown.
+
+  Automated unit/integration     Not started             Current checks are manual;
+  tests                                                  build assertion-based
+                                                         tests.
+
+  Sanitizers / fuzzing / load    Not started             Add repeatable
+  testing / CI                                           verification workflows.
+  ---------------------------------------------------------------------------------
+
+### Manual tests completed so far
+
+The user reports that these six header-parser cases passed:
+
+-   Multiple valid headers.
+-   Header-name capitalization is preserved as received.
+-   Missing colon is rejected.
+-   Empty header name is rejected.
+-   Leading/trailing spaces and tabs around a header value are trimmed.
+-   Too many headers are rejected.
+
+The basic response was also exercised with `curl -v`, and request
+reception / parsing was manually tested with `nc`. The
+`http_validate_host()` function has been written, but its dedicated test
+matrix still needs to be run.
+
+## Current implementation details
+
+The current program is a single-connection TCP prototype:
+
+-   `src/server.c` creates an IPv4 TCP listening socket on
+    `0.0.0.0:8000`, enables `SO_REUSEADDR`, binds, listens, and accepts
+    one client.
+-   `src/main.c` accepts one connection, receives a request, parses the
+    request line and headers, prints parsed data, sends one response,
+    then closes both sockets and exits.
+-   `src/http.c` contains request reception, request-line parsing,
+    header parsing, header lookup, Host validation, and basic response
+    sending.
+-   `http_receive_request()` may read beyond `\r\n\r\n` into the same
+    buffer. Future body/framing code must not discard those extra bytes.
+-   The response is currently a basic `200 OK` plain-text response with
+    `Connection: close`; it is not selected by method or path.
+-   `include/config.h` currently sets port `8000` and listen backlog
+    `10`.
+-   `include/http.h` defines the `HttpRequest` / `HttpHeader` structures
+    and HTTP API declarations. Keep the header-name field consistent
+    (`key` or `name`) across the struct, parser, lookup, validator, and
+    logging code.
+-   There is no router, JSON parser, automated unit-test suite, fuzz
+    target, CI configuration, or runtime configuration yet.
+
+The Makefile provides `compile`, `scompile`, `run`, and `test` targets.
+The `scompile` target enables C11 and common warning flags, but warnings
+are not necessarily treated as errors. The `test` target is a netcat
+smoke request, not an assertion-based test suite, and requires the
+server to be running in another terminal.
 
 ## Repository layout
 
-```text
+``` text
 .
 ├── include/
-│   ├── config.h       # Current port/backlog constants
-│   ├── errors.h       # Current process and function status constants
-│   ├── http.h         # Current request structure and HTTP function API
-│   └── server.h       # Current socket function API
+│   ├── config.h       # Port and backlog constants
+│   ├── errors.h       # Current process/function status constants
+│   ├── http.h         # Request structures and HTTP API declarations
+│   └── server.h       # Socket API declarations
 ├── src/
-│   ├── http.c         # Current request receive/line parse and fixed response
-│   ├── main.c         # Current single-client server flow
-│   └── server.c       # Current IPv4 socket setup, bind/listen/accept
+│   ├── http.c         # Receive, parsing, lookup, Host validation, response
+│   ├── main.c         # Single-client server flow
+│   └── server.c       # IPv4 socket setup, bind/listen/accept
 ├── output/            # Local compiled executable (ignored by Git)
-├── Makefile           # Current build/run/smoke-test targets
+├── Makefile           # Build/run/smoke-test targets
 └── README.md
 ```
 
-As the implementation grows, keep modules focused. A likely evolution is to
-add separate parser, router, JSON, and test modules rather than expanding the
-current socket and HTTP files into one large implementation. Proposed modules
-and responsibilities are listed in the sprint plan.
+As the implementation grows, keep modules focused. Likely future modules
+include framing/I/O, routing, JSON, and automated tests rather than
+expanding the current source files into one large implementation.
 
 ## Build and run the current prototype
 
 ### Requirements
 
-- Linux or another POSIX-like environment with BSD sockets.
-- GCC and GNU Make.
-- `nc` (netcat) to use the existing smoke-test target.
+-   Linux or another POSIX-like environment with BSD sockets.
+-   GCC and GNU Make.
+-   `nc` (netcat) for the existing smoke-test target.
+-   `curl` is useful for inspecting responses.
 
 From the repository root:
 
-```sh
+``` sh
 make scompile
 make run
 ```
 
-The server listens on port `8000` and handles exactly one client before exiting.
-To exercise the current smoke target, start `make run` in one terminal and,
-while it is waiting for a connection, run `make test` in another terminal.
-`make test` sends a single `GET / HTTP/1.1` request; it does not verify the
-response or run a test suite. The compiled executable is `output/a.out`.
+The server listens on port `8000` and handles exactly one client before
+exiting. Start `make run` in one terminal, then run `make test` in
+another while the server is waiting for a connection. The existing
+`make test` target sends one `GET / HTTP/1.1` request; it does not
+verify the response or run a test suite. The compiled executable is
+`output/a.out`.
 
-## Development roadmap
+Example manual request:
 
-Sprints are ordered by dependency and start from the code described in
-[Current implementation status](#current-implementation-status). Exit criteria
-should be demonstrated with tests, not just implemented.
+``` sh
+printf 'GET /products/42 HTTP/1.1\r\nHost: localhost:8000\r\n\r\n' \
+  | nc -N 127.0.0.1 8000
+```
 
-| Sprint | Focus | Core modules / work | Exit criteria |
-| --- | --- | --- | --- |
-| 0 — Baseline and build | Make the prototype easy to build and inspect | `Makefile`, `include/config.h`, `src/main.c`; enable `-std=c11 -Wall -Wextra -Wpedantic -Werror`, deterministic clean/build targets, socket cleanup on every error path | Clean build with warnings treated as errors; documented repeatable build and smoke test |
-| 1 — HTTP parser correctness | Replace request-line-only handling with bounded message parsing | New `http_parser` module/API; request line, field syntax, exactly one valid `Host`, CRLF rules, request-target and version handling; structured parse errors | Table-driven parser tests cover valid/malformed lines and headers; enforce request-line/header/count/total-size limits; return appropriate `400`, `414`, `431`, and `505` outcomes |
-| 2 — Framing and connection I/O | Safely consume complete requests and send complete responses | `http_framing` and `io` helpers; `Content-Length`, chunked coding, conflicting framing rejection, partial I/O, `SIGPIPE` handling, read/write deadlines | Body framing tests including truncation and malformed chunks; correct `411`/`413` handling; no hangs on incomplete or oversized input |
-| 3 — HTTP semantics and routing | Dispatch methods and paths and implement connection behavior | New `router` and `response` modules; route registration/matching, `404`, `405` plus `Allow`, `HEAD`, `OPTIONS`, keep-alive, sequential requests/pipelining boundaries | Route/method tests; curl tests for supported semantics; unsupported methods and versions receive deliberate status responses |
-| 4 — JSON request support | Validate JSON endpoints and content types | New `json` module or a small maintained C JSON library; `Content-Type` checks, UTF-8 validation, nesting and size limits, parser error mapping | RFC 8259 valid/invalid fixtures; wrong media type yields `415`; invalid JSON yields `400`; boundary/depth tests pass |
-| 5 — Hardening and runtime behavior | Defend resource use and shut down reliably | `config`, timeout/timer, logging, and signal-handling modules; idle/header/body timeouts, graceful `SIGTERM`, bounded resources, safe path decoding policy | Timeout, shutdown, malformed-input and resource-limit tests; ASan/UBSan clean; parser fuzzing runs without crashes or hangs |
-| 6 — Production-like verification | Verify behavior across clients and sustained use | Unit/integration test harness, fuzz harnesses, CI, operational docs; real-client, differential, load, and soak testing | Test matrix below passes; no sanitizer findings/leaks; documented protocol scope and known limitations |
+## API implementation tracker
 
-## Core module responsibilities
+This is the intended sequence of APIs and behavior to implement to
+approach HTTP/1.1 readiness. Names are proposed where the API does not
+exist yet; adjust names to match the project's conventions.
 
-| Module | Responsibility | Current state |
-| --- | --- | --- |
-| Server/socket layer | Create, bind, listen, accept, and close TCP sockets | Basic IPv4, one-client implementation in `src/server.c` |
-| HTTP parser | Parse request line and fields with strict bounds and report parse errors | Partial: request line only in `src/http.c` |
-| Framing and I/O | Read complete message bodies and write responses despite partial I/O; implement framing and deadlines | Not implemented; receive currently stops at end of headers |
-| Router | Match method and normalized path; distinguish 404 from 405 | Not implemented |
-| JSON | Parse valid JSON and enforce UTF-8, body-size, and depth constraints | Not implemented |
-| Response | Construct status line, headers, and body consistently; support HEAD and connection policy | Fixed plain-text 200 response only |
-| Runtime/configuration | Timeouts, graceful shutdown, logging, explicit configurable limits | Constants only; no timeout or graceful shutdown handling |
-| Tests/tooling | Unit, integration, fuzz, sanitizer, client, and load tests | Only a manual netcat smoke request |
+### Phase 1 --- Request validation
 
-## HTTP behavior and acceptance checklist
+-   [x] `http_receive_request()` --- bounded initial request reception.
+-   [x] `http_parse_request_line()` --- parse method, target, and
+    version.
+-   [x] `http_parse_headers()` --- parse header fields with basic syntax
+    and bounds.
+-   [x] `http_get_header()` --- case-insensitive lookup of the first
+    matching field.
+-   [x] `http_validate_host()` --- basic HTTP/1.0/1.1 Host
+    presence/uniqueness/empty-value checks; **dedicated tests pending**.
+-   [ ] Add tests for valid/missing/duplicate/empty/whitespace-only
+    `Host` fields and unsupported versions.
+-   [ ] Add complete request-line, header grammar, CRLF,
+    control-character, and length/count boundary tests.
+-   [ ] Return structured parser/validation errors so the server can
+    send deliberate HTTP responses.
 
-The eventual server must either implement or explicitly reject each relevant
-case with a correct response. It must not silently accept malformed or
+### Phase 2 --- Framing and request-body I/O
+
+-   [ ] `http_get_header_count()` or equivalent duplicate-aware header
+    inspection helper, if useful.
+-   [ ] `http_validate_content_length()` --- validate decimal syntax,
+    duplicates, conflicting values, and integer overflow.
+-   [ ] `http_validate_transfer_encoding()` --- parse transfer-coding
+    values and enforce supported coding rules.
+-   [ ] `http_validate_framing()` --- reject ambiguous framing,
+    including `Content-Length` together with `Transfer-Encoding`.
+-   [ ] `http_read_content_length_body()` --- read exactly the declared
+    body length under a configured size limit.
+-   [ ] `http_decode_chunked_body()` --- decode chunk sizes, chunk data,
+    CRLF delimiters, and trailers with limits.
+-   [ ] Preserve bytes already read after the header terminator; do not
+    assume one `recv()` corresponds to one HTTP message.
+-   [ ] Add read/write loops for partial I/O, interrupted system calls,
+    deadlines, and safe handling of broken connections / `SIGPIPE`.
+
+### Phase 3 --- HTTP semantics and routing
+
+-   [ ] `http_validate_request_target()` --- validate supported target
+    forms and enforce target length.
+-   [ ] `router_register()` / `router_match()` or equivalent ---
+    register method/path handlers.
+-   [ ] Build response helpers for status line, headers, body length,
+    and connection policy.
+-   [ ] Implement `404 Not Found`, `405 Method Not Allowed` with
+    `Allow`, `HEAD`, and `OPTIONS`.
+-   [ ] Define URI percent-decoding and trailing-slash policies.
+-   [ ] Implement persistent connections, sequential request processing,
+    and pipelining-safe message boundaries.
+
+### Phase 4 --- JSON request support
+
+-   [ ] Select a small maintained C JSON parser or implement a clearly
+    scoped parser if that is an explicit learning goal.
+-   [ ] Validate `Content-Type` for JSON-only endpoints.
+-   [ ] Enforce body size, UTF-8, and nesting-depth limits.
+-   [ ] Map invalid JSON to `400 Bad Request` and unsupported media
+    types to `415 Unsupported Media Type`.
+-   [ ] Add valid/invalid RFC 8259 fixtures and boundary tests.
+
+### Phase 5 --- Hardening and runtime behavior
+
+-   [ ] Add configurable request/header/body limits and idle/header/body
+    timeouts.
+-   [ ] Add operational logging and graceful shutdown on
+    `SIGTERM`/`SIGINT`.
+-   [ ] Ensure descriptors and request buffers are cleaned up on every
+    error path.
+-   [ ] Add AddressSanitizer and UndefinedBehaviorSanitizer builds; use
+    Valgrind where available.
+-   [ ] Add HTTP and JSON fuzz harnesses and ensure malformed input does
+    not crash or hang the server.
+
+### Phase 6 --- Verification
+
+-   [ ] Unit tests for parser, framing, router, JSON, and response
+    serialization.
+-   [ ] Integration tests that assert status codes, headers, bodies,
+    connection behavior, and timeouts.
+-   [ ] Tests for partial reads/writes, truncated bodies, oversized
+    fields/bodies, malformed chunks, and ambiguous framing.
+-   [ ] `curl` and browser checks for supported behavior.
+-   [ ] Load/soak tests for latency, throughput, connection/resource
+    limits, and sustained stability.
+-   [ ] CI workflow for build and automated tests.
+
+## HTTP/1.1 acceptance checklist
+
+The eventual server must implement or explicitly reject relevant cases
+with a correct response. It must not silently accept malformed or
 ambiguous requests.
 
-| Area | Required checks |
-| --- | --- |
-| Request syntax | Valid request line and field syntax; reject malformed whitespace, invalid line endings, control characters, and CR/LF injection |
-| Host and target | Require exactly one valid `Host` for HTTP/1.1; bound request-target length; test origin-form targets and invalid targets |
-| Message framing | Valid `Content-Length`; valid chunked transfer coding; reject `Content-Length` plus `Transfer-Encoding`; detect truncated and overlong bodies |
-| Methods and routing | Supported route; unknown path `404`; known path with unsupported method `405` and `Allow`; `HEAD` response without a body; `OPTIONS` behavior |
-| Connections | Keep-alive semantics; multiple sequential requests; pipelined bytes remain correctly separated; close behavior is deterministic |
-| Expectations and versions | `Expect: 100-continue`; unsupported expectation response; malformed expectation; unsupported HTTP version response |
-| Limits | Oversized request line (`414`), headers (`431`), and body (`413`); missing required body length where applicable (`411`); timeout handling |
-| JSON | Valid RFC 8259 values; invalid syntax and UTF-8; nesting and size boundaries; unsupported/missing media type (`415`) for JSON-only routes |
-| Error behavior | Appropriate `400`, `404`, `405`, `411`, `413`, `414`, `415`, `431`, `501`, and `505` responses; errors do not leave the connection in an unsafe parser state |
+  -----------------------------------------------------------------------
+  Area                                Required checks
+  ----------------------------------- -----------------------------------
+  Request syntax                      Valid request line and field
+                                      syntax; reject malformed
+                                      whitespace, invalid line endings,
+                                      prohibited control characters, and
+                                      CR/LF injection
 
-Status codes are not a substitute for request validation: each response must
-also have correct framing and connection behavior for the chosen scope.
+  Host and target                     Exactly one valid `Host` for
+                                      HTTP/1.1; bounded request-target
+                                      length; test origin-form and
+                                      invalid targets
+
+  Message framing                     Valid `Content-Length`; valid
+                                      chunked transfer coding; reject
+                                      `Content-Length` plus
+                                      `Transfer-Encoding`; detect
+                                      truncated and oversized bodies
+
+  Methods and routing                 Supported route; unknown path
+                                      `404`; known path with unsupported
+                                      method `405` and `Allow`; `HEAD`
+                                      without a response body; deliberate
+                                      `OPTIONS` behavior
+
+  Connections                         Keep-alive semantics; multiple
+                                      sequential requests; pipelined
+                                      bytes remain correctly separated;
+                                      deterministic close behavior
+
+  Expectations and versions           `Expect: 100-continue`; unsupported
+                                      expectation handling; malformed
+                                      expectation; unsupported HTTP
+                                      version response
+
+  Limits                              Oversized request line (`414`),
+                                      headers (`431`), and body (`413`);
+                                      missing required body length where
+                                      applicable (`411`); timeout
+                                      handling
+
+  JSON                                Valid RFC 8259 values; invalid
+                                      syntax and UTF-8; nesting and size
+                                      boundaries; unsupported/missing
+                                      media type (`415`) for JSON-only
+                                      routes
+
+  Error behavior                      Appropriate `400`, `404`, `405`,
+                                      `411`, `413`, `414`, `415`, `417`,
+                                      `431`, `501`, and `505` responses,
+                                      with correct response framing and
+                                      connection behavior
+  -----------------------------------------------------------------------
+
+Status codes alone are not sufficient: every error response must have
+correct framing and a deliberate connection policy.
 
 ## Test and verification plan
 
-The current `make test` target is a smoke test only. Build the following suites
-as part of the roadmap:
+The current `make test` target is a smoke test only. The roadmap should
+add:
 
-1. **Unit tests:** request-line, header, framing, target normalization, router,
-	 JSON parser, and response serialization. Include valid, invalid, and
-	 boundary-value tables.
-2. **Integration tests:** launch the server on a test port and verify status,
-	 headers, body length, connection behavior, multiple requests, malformed
-	 messages, and timeout behavior. Prefer a script/harness that asserts results
-	 rather than relying on visual inspection.
-3. **Security and robustness tests:** parser fuzzing for HTTP and JSON, repeated
-	 malformed requests, partial reads/writes, oversized fields/bodies, and
-	 request-framing ambiguity. Run the test suite under AddressSanitizer and
-	 UndefinedBehaviorSanitizer; use Valgrind where available.
-4. **Client compatibility:** exercise requests with `curl` and a browser for
-	 supported paths/methods. Compare selected valid and invalid cases against a
-	 known HTTP implementation, accounting for the explicitly chosen scope.
-5. **Load and soak tests:** measure throughput and latency, keep-alive behavior,
-	 connection/resource ceilings, and stability during sustained requests.
+1.  **Unit tests:** request line, headers, framing, target validation,
+    router, JSON, and response serialization. Include valid, invalid,
+    and boundary-value cases.
+2.  **Integration tests:** launch the server on a test port and assert
+    status, headers, body length, connection behavior, multiple
+    requests, malformed messages, and timeouts.
+3.  **Security and robustness tests:** fuzz HTTP and JSON parsers; test
+    repeated malformed requests, partial reads/writes, oversized
+    fields/bodies, and framing ambiguity. Run tests under ASan/UBSan and
+    Valgrind where available.
+4.  **Client compatibility:** use `curl` and a browser for supported
+    paths/methods; compare selected cases against a known HTTP
+    implementation while accounting for the documented scope.
+5.  **Load and soak tests:** measure throughput, latency, keep-alive
+    behavior, connection/resource ceilings, and sustained stability.
 
-### Definition of done
+## Definition of done
 
-- **Correct:** the documented HTTP/1.1 subset and JSON behavior pass unit and
-	integration tests, including message framing and error cases.
-- **Hardened:** strict configurable limits and timeouts are enforced; fuzzing
-	and malformed-input tests reveal no crashes or hangs; sanitizer runs are
-	clean.
-- **Production-like for the stated scope:** graceful shutdown, useful structured
-	logs, explicit configuration, CI, client compatibility checks, and documented
-	load/soak results are in place. This is a learning project, not a claim of
-	production equivalence or a security certification.
+-   **Correct:** the documented HTTP/1.1 subset and JSON behavior pass
+    unit and integration tests, including framing and error cases.
+-   **Hardened:** configurable limits and timeouts are enforced; fuzzing
+    and malformed-input tests reveal no crashes or hangs; sanitizer runs
+    are clean.
+-   **Production-like for the stated scope:** graceful shutdown, useful
+    logs, explicit configuration, CI, client compatibility checks, and
+    documented load/soak results are in place.
+
+This remains a learning project, not a claim of production equivalence
+or a security certification.
 
 ## License
 
-This project is distributed under the MIT License; see [LICENSE](LICENSE).
+This project is distributed under the MIT License; see
+[`LICENSE`](LICENSE).
