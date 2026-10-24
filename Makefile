@@ -15,5 +15,11 @@ run:
 test:
 	printf 'GET / HTTP/1.1\r\nHost: localhost:8000\r\n\r\n' | nc 127.0.0.1 8000
 
+unit-test:
+	gcc -std=c11 -Wall -Wextra -Wpedantic \
+    -Iinclude tests/test_http.c src/http.c \
+    -o output/test_http
+	./output/test_http
+
 kill-port:
 	fuser -k 8000/tcp
