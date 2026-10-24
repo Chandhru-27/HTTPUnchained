@@ -40,7 +40,8 @@ int main(void) {
   }
 
   HttpRequest request = {0};
-  if (http_parse_request_line(raw_request, request_length, &request) < 0) {
+  if (http_parse_request_line(raw_request, request_length, &request).status !=
+      HTTP_PARSE_OK) {
     close(clientsock_fd);
     close(serversock_fd);
     return STATUS_EXIT_FAILURE;
@@ -49,7 +50,8 @@ int main(void) {
   printf("Method: %s\nTarget: %s\nVersion: %s\n", request.method,
          request.target, request.version);
 
-  if (http_parse_headers(raw_request, request_length, &request) < 0) {
+  if (http_parse_headers(raw_request, request_length, &request).status !=
+      HTTP_PARSE_OK) {
     close(clientsock_fd);
     close(serversock_fd);
     return STATUS_EXIT_FAILURE;
@@ -59,6 +61,15 @@ int main(void) {
     printf("Header: %s: %s\n", request.headers[i].key,
            request.headers[i].value);
   }
+
+  const char* value = http_get_header(&request, "HoST");
+  if (value == NULL) {
+    close(clientsock_fd);
+    close(serversock_fd);
+    return STATUS_EXIT_FAILURE;
+  }
+
+  printf("%s: %s\n", "HOST", value);
 
   if (http_send_response(clientsock_fd) < 0) {
     close(clientsock_fd);

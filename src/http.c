@@ -1,13 +1,54 @@
 #include "http.h"
 
+#include <ctype.h>
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/socket.h>
 
 #include "errors.h"
+
+HttpResult_T get_result_from_status(HttpParseStatus_T status) {
+  HttpResult_T result;
+  result.status = status;
+
+  switch (status) {
+    case HTTP_PARSE_OK:
+      result.http_status_code = 200;
+      result.description = "OK";
+      break;
+
+    case HTTP_PARSE_BAD_REQUEST:
+      result.http_status_code = 400;
+      result.description = "Bad Request";
+      break;
+
+    case HTTP_PARSE_TARGET_TOO_LONG:
+      result.http_status_code = 414;
+      result.description = "URI Too Long";
+      break;
+
+    case HTTP_PARSE_HEADERS_TOO_LARGE:
+      result.http_status_code = 431;
+      result.description = "Request Header Fields Too Large";
+      break;
+
+    case HTTP_PARSE_VERSION_UNSUPPORTED:
+      result.http_status_code = 505;
+      result.description = "HTTP Version Not Supported";
+      break;
+
+    default:
+      result.http_status_code = 500;
+      result.description = "Internal Server Error";
+      break;
+  }
+
+  return result;
+}
 
 int8_t http_receive_request(int clientsock_fd, char* buffer, size_t capacity,
                             size_t* request_length) {
@@ -48,41 +89,44 @@ int8_t http_receive_request(int clientsock_fd, char* buffer, size_t capacity,
   return STATUS_FATAL_ERROR;
 }
 
-int8_t http_parse_request_line(const char* buffer, size_t request_length,
-                               HttpRequest* request) {
+HttpResult_T http_parse_request_line(const char* buffer, size_t request_length,
+                                     HttpRequest* request) {
   if (buffer == NULL || request == NULL || request_length == 0 ||
       request_length > HTTP_MAX_REQUEST_SIZE)
-    return STATUS_FATAL_ERROR;
+    return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
 
   const char* line_end = strstr(buffer, "\r\n");
 
   if (line_end == NULL || (size_t)(line_end - buffer) >= request_length)
-    return STATUS_FATAL_ERROR;
+    return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
 
   size_t line_length = (size_t)(line_end - buffer);
   char line[HTTP_MAX_REQUEST_SIZE + 1];
 
   if (line_length >= sizeof(line)) {
-    return STATUS_FATAL_ERROR;
+    return get_result_from_status(HTTP_PARSE_TARGET_TOO_LONG);
   }
 
   memcpy(line, buffer, line_length);
   line[line_length] = '\0';
+
+  if (line[0] == '\0' || line[0] == '\t')
+    return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
 
   char extra;
   int fields = sscanf(line, "%15s %2047s %15s %c", request->method,
                       request->target, request->version, &extra);
 
   if (fields != 3) {
-    return STATUS_FATAL_ERROR;
+    return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
   }
 
   if (strcmp(request->version, "HTTP/1.1") != 0 &&
       strcmp(request->version, "HTTP/1.0") != 0) {
-    return STATUS_FATAL_ERROR;
+    return get_result_from_status(HTTP_PARSE_VERSION_UNSUPPORTED);
   }
 
-  return STATUS_EXEC_SUCCESS;
+  return get_result_from_status(HTTP_PARSE_OK);
 }
 
 static int http_is_token_char(unsigned char c) {
@@ -94,11 +138,11 @@ static int http_is_token_char(unsigned char c) {
   return strchr("!#$%&'*+-.^_`|~", c) != NULL;
 }
 
-int8_t http_parse_headers(const char* buffer, size_t request_length,
-                          HttpRequest* request) {
+HttpResult_T http_parse_headers(const char* buffer, size_t request_length,
+                                HttpRequest* request) {
   if (buffer == NULL || request == NULL || request_length == 0 ||
       request_length > HTTP_MAX_REQUEST_SIZE) {
-    return STATUS_FATAL_ERROR;
+    return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
   }
 
   request->header_count = 0;
@@ -108,7 +152,7 @@ int8_t http_parse_headers(const char* buffer, size_t request_length,
   if (request_line_end == NULL ||
       request_line_end + 1 >= buffer + request_length ||
       request_line_end[1] != '\n') {
-    return STATUS_FATAL_ERROR;
+    return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
   }
 
   size_t offset = (size_t)(request_line_end - buffer) + 2;
@@ -121,34 +165,34 @@ int8_t http_parse_headers(const char* buffer, size_t request_length,
 
     if (line_end == NULL || line_end + 1 >= buffer + request_length ||
         line_end[1] != '\n') {
-      return STATUS_FATAL_ERROR;
+      return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
     }
 
     size_t line_length = (size_t)(line_end - line);
 
     if (line_length == 0) {
-      return STATUS_EXEC_SUCCESS;
+      return get_result_from_status(HTTP_PARSE_OK);
     }
 
     if (request->header_count >= HTTP_MAX_HEADERS) {
-      return STATUS_FATAL_ERROR;
+      return get_result_from_status(HTTP_PARSE_HEADERS_TOO_LARGE);
     }
 
     const char* colon = memchr(line, ':', line_length);
 
     if (colon == NULL || colon == line) {
-      return STATUS_FATAL_ERROR;
+      return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
     }
 
     size_t key_length = (size_t)(colon - line);
 
     if (key_length >= HTTP_MAX_HEADER_KEY_SIZE) {
-      return STATUS_FATAL_ERROR;
+      return get_result_from_status(HTTP_PARSE_HEADERS_TOO_LARGE);
     }
 
     for (size_t i = 0; i < key_length; i++) {
       if (!http_is_token_char((unsigned char)line[i])) {
-        return STATUS_FATAL_ERROR;
+        return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
       }
     }
 
@@ -164,14 +208,14 @@ int8_t http_parse_headers(const char* buffer, size_t request_length,
     size_t value_length = (size_t)(header_end - value);
 
     if (value_length >= HTTP_MAX_HEADER_VALUE_SIZE) {
-      return STATUS_FATAL_ERROR;
+      return get_result_from_status(HTTP_PARSE_HEADERS_TOO_LARGE);
     }
 
     for (size_t i = 0; i < value_length; i++) {
       unsigned char c = (unsigned char)value[i];
 
       if ((c < 32 && c != '\t') || c == 127) {
-        return STATUS_FATAL_ERROR;
+        return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
       }
     }
 
@@ -188,7 +232,69 @@ int8_t http_parse_headers(const char* buffer, size_t request_length,
     offset += line_length + 2;
   }
 
-  return STATUS_FATAL_ERROR;
+  return get_result_from_status(HTTP_PARSE_OK);
+}
+
+const char* http_get_header(const HttpRequest* request, const char* key) {
+  if (request == NULL || key == NULL || key[0] == '\0') return NULL;
+
+  size_t size = request->header_count;
+
+  if (size == 0 || size > HTTP_MAX_HEADERS) return NULL;
+
+  for (size_t i = 0; i < size; i++) {
+    if (strcasecmp(request->headers[i].key, key) == 0) {
+      return request->headers[i].value;
+    }
+  }
+
+  return NULL;
+}
+
+HttpResult_T http_validate_host(const HttpRequest* request) {
+  if (request == NULL || request->header_count > HTTP_MAX_HEADERS) {
+    return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
+  }
+
+  if (strcmp(request->version, "HTTP/1.0") == 0) {
+    const char* host = http_get_header(request, "Host");
+
+    if (host == NULL) {
+      return get_result_from_status(HTTP_PARSE_OK);
+    }
+
+    return get_result_from_status(HTTP_PARSE_OK);
+  }
+
+  if (strcmp(request->version, "HTTP/1.1") != 0) {
+    return get_result_from_status(HTTP_PARSE_VERSION_UNSUPPORTED);
+  }
+
+  size_t host_count = 0;
+  const char* host_value = NULL;
+
+  for (size_t i = 0; i < request->header_count; i++) {
+    if (strcasecmp(request->headers[i].key, "Host") == 0) {
+      host_count++;
+      host_value = request->headers[i].value;
+    }
+  }
+
+  if (host_count != 1) {
+    return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
+  }
+
+  const char* p = host_value;
+
+  while (*p == ' ' || *p == '\t') {
+    p++;
+  }
+
+  if (*p == '\0') {
+    return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
+  }
+
+  return get_result_from_status(HTTP_PARSE_OK);
 }
 
 int8_t http_send_response(int clientsock_fd) {

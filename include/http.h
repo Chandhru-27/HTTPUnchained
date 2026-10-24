@@ -14,6 +14,20 @@
 #define HTTP_MAX_TARGET_SIZE 2048
 #define HTTP_MAX_VERSION_SIZE 16
 
+typedef enum {
+  HTTP_PARSE_OK = 0,
+  HTTP_PARSE_BAD_REQUEST,
+  HTTP_PARSE_TARGET_TOO_LONG,
+  HTTP_PARSE_HEADERS_TOO_LARGE,
+  HTTP_PARSE_VERSION_UNSUPPORTED,
+} HttpParseStatus_T;
+
+typedef struct {
+  HttpParseStatus_T status;
+  uint32_t http_status_code;
+  const char* description;
+} HttpResult_T;
+
 typedef struct {
   char key[HTTP_MAX_HEADER_KEY_SIZE];
   char value[HTTP_MAX_HEADER_VALUE_SIZE];
@@ -30,10 +44,14 @@ typedef struct {
 
 int8_t http_receive_request(int clientsock_fd, char* buffer, size_t capacity,
                             size_t* request_length);
-int8_t http_parse_request_line(const char* buffer, size_t request_length,
-                               HttpRequest* request);
-int8_t http_parse_headers(const char* buffer, size_t request_length,
-                          HttpRequest* request);
+HttpResult_T http_parse_request_line(const char* buffer, size_t request_length,
+                                     HttpRequest* request);
+HttpResult_T http_parse_headers(const char* buffer, size_t request_length,
+                                HttpRequest* request);
+const char* http_get_header(const HttpRequest* request, const char* key);
+HttpResult_T http_validate_host(const HttpRequest* request);
 int8_t http_send_response(int clientsock_fd);
+
+HttpResult_T get_result_from_status(HttpParseStatus_T status);
 
 #endif
