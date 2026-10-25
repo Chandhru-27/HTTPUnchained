@@ -1,56 +1,21 @@
-#include "http.h"
+/**
+ * Implementation of request-line and header parsing declared in
+ * http/parser.h, plus the private tokenizing helpers they rely on.
+ */
+#include "http/parser.h"
 
 #include <ctype.h>
-#include <errno.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <strings.h>
-#include <sys/socket.h>
 
-#include "errors.h"
+#include "http/status.h"
 
-HttpResult_T get_result_from_status(HttpParseStatus_T status) {
-  HttpResult_T result;
-  result.status = status;
-
-  switch (status) {
-    case HTTP_PARSE_OK:
-      result.http_status_code = 200;
-      result.description = "OK";
-      break;
-
-    case HTTP_PARSE_BAD_REQUEST:
-      result.http_status_code = 400;
-      result.description = "Bad Request";
-      break;
-
-    case HTTP_PARSE_TARGET_TOO_LONG:
-      result.http_status_code = 414;
-      result.description = "URI Too Long";
-      break;
-
-    case HTTP_PARSE_HEADERS_TOO_LARGE:
-      result.http_status_code = 431;
-      result.description = "Request Header Fields Too Large";
-      break;
-
-    case HTTP_PARSE_VERSION_UNSUPPORTED:
-      result.http_status_code = 505;
-      result.description = "HTTP Version Not Supported";
-      break;
-
-    default:
-      result.http_status_code = 500;
-      result.description = "Internal Server Error";
-      break;
-  }
-
-  return result;
-}
-
-void trim(char** str_ptr) {
+/**
+ * @brief Strip leading/trailing whitespace from a string in place by
+ *        advancing *str_ptr past leading whitespace and truncating
+ *        trailing whitespace with a NUL.
+ * @param str_ptr In/out pointer to the string to trim.
+ */
+static void trim(char** str_ptr) {
   while (isspace((unsigned char)**str_ptr)) {
     (*str_ptr)++;
   }
@@ -65,6 +30,12 @@ void trim(char** str_ptr) {
   *(end + 1) = '\0';
 }
 
+/**
+ * @brief Check whether a byte is a valid HTTP header-field token
+ *        character (RFC 9110 tchar).
+ * @param c The byte to check.
+ * @return Non-zero if c is a valid token character.
+ */
 static int http_is_token_char(unsigned char c) {
   if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
       (c >= '0' && c <= '9')) {
@@ -72,45 +43,6 @@ static int http_is_token_char(unsigned char c) {
   }
 
   return strchr("!#$%&'*+-.^_`|~", c) != NULL;
-}
-
-int8_t http_receive_request(int clientsock_fd, char* buffer, size_t capacity,
-                            size_t* request_length) {
-  if (buffer == NULL || request_length == NULL || capacity < 4)
-    return STATUS_FATAL_ERROR;
-
-  buffer[0] = '\0';
-  *request_length = 0;
-
-  size_t total_received = 0;
-  while (total_received < capacity - 1) {
-    ssize_t bytes_read = recv(clientsock_fd, buffer + total_received,
-                              capacity - total_received - 1, 0);
-
-    if (bytes_read < 0) {
-      if (errno == EINTR) continue;
-
-      perror("recv failed");
-      return STATUS_FATAL_ERROR;
-    }
-
-    if (bytes_read == 0) {
-      printf("Client disconnected before headers completed.\n");
-      return STATUS_FATAL_ERROR;
-    }
-
-    total_received += (size_t)bytes_read;
-    buffer[total_received] = '\0';
-
-    if (strstr(buffer, "\r\n\r\n") != NULL) {
-      *request_length = total_received;
-      printf("Received from client:\n%s\n", buffer);
-      return STATUS_EXEC_SUCCESS;
-    }
-  }
-
-  fprintf(stderr, "Request headers exceed buffer capacity.\n");
-  return STATUS_FATAL_ERROR;
 }
 
 HttpResult_T http_parse_request_line(const char* buffer, size_t request_length,
@@ -290,124 +222,4 @@ HttpResult_T http_parse_headers(const char* buffer, size_t request_length,
   }
 
   return get_result_from_status(HTTP_PARSE_OK);
-}
-
-const char* http_get_header(const HttpRequest* request, const char* key) {
-  if (request == NULL || key == NULL || key[0] == '\0') return NULL;
-
-  size_t size = request->header_count;
-
-  if (size == 0 || size > HTTP_MAX_HEADERS) return NULL;
-
-  for (size_t i = 0; i < size; i++) {
-    if (strcasecmp(request->headers[i].key, key) == 0) {
-      return request->headers[i].value;
-    }
-  }
-
-  return NULL;
-}
-
-HttpResult_T http_validate_host(const HttpRequest* request) {
-  if (request == NULL || request->header_count > HTTP_MAX_HEADERS) {
-    return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
-  }
-
-  if (strcmp(request->version, "HTTP/1.0") == 0) {
-    const char* host = http_get_header(request, "Host");
-
-    if (host == NULL) {
-      return get_result_from_status(HTTP_PARSE_OK);
-    }
-
-    return get_result_from_status(HTTP_PARSE_OK);
-  }
-
-  if (strcmp(request->version, "HTTP/1.1") != 0) {
-    return get_result_from_status(HTTP_PARSE_VERSION_UNSUPPORTED);
-  }
-
-  size_t host_count = 0;
-  const char* host_value = NULL;
-
-  for (size_t i = 0; i < request->header_count; i++) {
-    if (strcasecmp(request->headers[i].key, "Host") == 0) {
-      host_count++;
-      host_value = request->headers[i].value;
-    }
-  }
-
-  if (host_count != 1) {
-    return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
-  }
-
-  const char* p = host_value;
-
-  while (*p == ' ' || *p == '\t') {
-    p++;
-  }
-
-  if (*p == '\0') {
-    return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
-  }
-
-  return get_result_from_status(HTTP_PARSE_OK);
-}
-
-int8_t http_send_response(int clientsock_fd) {
-  const char* body = "Message received loud and clear!\n";
-  size_t body_length = strlen(body);
-
-  char headers[256];
-  ssize_t header_length = snprintf(headers, sizeof(headers),
-                                   "HTTP/1.1 200 OK\r\n"
-                                   "Content-Type: text/plain; charset=utf-8\r\n"
-                                   "Content-Length: %zu\r\n"
-                                   "Connection: close\r\n"
-                                   "\r\n",
-                                   body_length);
-
-  if (header_length < 0 || (size_t)header_length >= sizeof(headers)) {
-    fprintf(stderr, "Failed to construct HTTP headers.\n");
-    return STATUS_FATAL_ERROR;
-  }
-
-  size_t total_sent = 0;
-  while (total_sent < (size_t)header_length) {
-    ssize_t bytes_sent = send(clientsock_fd, headers + total_sent,
-                              (size_t)header_length - total_sent, 0);
-
-    if (bytes_sent < 0) {
-      perror("Headers: send failed");
-      return STATUS_FATAL_ERROR;
-    }
-
-    if (bytes_sent == 0) {
-      fprintf(stderr, "Headers: send returned zero bytes.\n");
-      return STATUS_FATAL_ERROR;
-    }
-
-    total_sent += (size_t)bytes_sent;
-  }
-
-  total_sent = 0;
-  while (total_sent < body_length) {
-    ssize_t bytes_sent =
-        send(clientsock_fd, body + total_sent, body_length - total_sent, 0);
-
-    if (bytes_sent < 0) {
-      perror("Body: send failed");
-      return STATUS_FATAL_ERROR;
-    }
-
-    if (bytes_sent == 0) {
-      fprintf(stderr, "Body: send returned zero bytes.\n");
-      return STATUS_FATAL_ERROR;
-    }
-
-    total_sent += (size_t)bytes_sent;
-  }
-
-  printf("Reply sent successfully.\n");
-  return STATUS_EXEC_SUCCESS;
 }

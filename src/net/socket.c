@@ -1,4 +1,8 @@
-#include "server.h"
+/**
+ * Implementation of the IPv4 TCP socket lifecycle declared in
+ * net/socket.h: create, bind, listen, accept.
+ */
+#include "net/socket.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -6,8 +10,8 @@
 #include <string.h>
 #include <sys/socket.h>
 
-#include "config.h"
-#include "errors.h"
+#include "core/config.h"
+#include "core/errors.h"
 
 int net_create_serversock(void) {
   int serversock_fd = socket(AF_INET, SOCK_STREAM, 0);
