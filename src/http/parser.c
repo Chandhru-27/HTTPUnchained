@@ -10,6 +10,7 @@
 #include "http/status.h"
 
 /**
+ * @note This is a helper function and not declared in the source header.
  * @brief Strip leading/trailing whitespace from a string in place by
  *        advancing *str_ptr past leading whitespace and truncating
  *        trailing whitespace with a NUL.
@@ -31,6 +32,7 @@ static void trim(char** str_ptr) {
 }
 
 /**
+ * @note This is a helper function and not declared in the source header.
  * @brief Check whether a byte is a valid HTTP header-field token
  *        character (RFC 9110 tchar).
  * @param c The byte to check.
