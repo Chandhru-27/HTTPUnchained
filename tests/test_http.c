@@ -1,21 +1,29 @@
+/**
+ * Phase 1 unit tests: request-line parsing, header parsing, and Host
+ * validation. Run via `make unit-test`.
+ */
 #define _GNU_SOURCE
-#include "http.h"
-
 #include <stdio.h>
 #include <string.h>
+
+#include "http/headers.h"
+#include "http/host.h"
+#include "http/parser.h"
+#include "http/request.h"
+#include "http/status.h"
 
 static int tests_run = 0;
 static int tests_failed = 0;
 
-#define CHECK(name, condition)                                 \
-  do {                                                         \
-    tests_run++;                                               \
-    if (condition) {                                           \
-      printf("PASS: %s\n", name);                              \
-    } else {                                                   \
-      printf("FAIL: %s (line %d)\n", name, __LINE__);          \
-      tests_failed++;                                          \
-    }                                                           \
+#define CHECK(name, condition)                        \
+  do {                                                \
+    tests_run++;                                      \
+    if (condition) {                                  \
+      printf("PASS: %s\n", name);                     \
+    } else {                                          \
+      printf("FAIL: %s (line %d)\n", name, __LINE__); \
+      tests_failed++;                                 \
+    }                                                 \
   } while (0)
 
 static HttpParseStatus_T parse_line(const char* input, HttpRequest* request) {
