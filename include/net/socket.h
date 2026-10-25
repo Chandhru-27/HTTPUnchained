@@ -7,6 +7,8 @@
 #ifndef NET_SOCKET_H
 #define NET_SOCKET_H
 
+#include <stdint.h>
+
 /**
  * @brief Create an IPv4 TCP socket with SO_REUSEADDR enabled.
  * @return The socket file descriptor, or STATUS_FATAL_ERROR on failure.
@@ -18,7 +20,7 @@ int net_create_serversock(void);
  * @param serversock_fd Socket returned by net_create_serversock().
  * @return STATUS_EXEC_SUCCESS on success, STATUS_FATAL_ERROR on failure.
  */
-int net_bind_serversock(int serversock_fd);
+int8_t net_bind_serversock(int serversock_fd);
 
 /**
  * @brief Start listening on a bound server socket with the configured
@@ -26,7 +28,7 @@ int net_bind_serversock(int serversock_fd);
  * @param serversock_fd Socket returned by net_create_serversock().
  * @return STATUS_EXEC_SUCCESS on success, STATUS_FATAL_ERROR on failure.
  */
-int net_listen_on_serversock(int serversock_fd);
+int8_t net_listen_on_serversock(int serversock_fd);
 
 /**
  * @brief Block until a client connects, then accept the connection.

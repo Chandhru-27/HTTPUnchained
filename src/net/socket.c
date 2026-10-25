@@ -34,7 +34,7 @@ int net_create_serversock(void) {
   return serversock_fd;
 }
 
-int net_bind_serversock(int serversock_fd) {
+int8_t net_bind_serversock(int serversock_fd) {
   struct sockaddr_in server_address = {0};
   server_address.sin_family = AF_INET;
   server_address.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -52,7 +52,7 @@ int net_bind_serversock(int serversock_fd) {
   return STATUS_EXEC_SUCCESS;
 }
 
-int net_listen_on_serversock(int serversock_fd) {
+int8_t net_listen_on_serversock(int serversock_fd) {
   if (listen(serversock_fd, BACKLOG) < 0) {
     perror("Listen failed!");
     return STATUS_FATAL_ERROR;
