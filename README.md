@@ -84,19 +84,22 @@ listed edge cases have been tested.
                                                          body or subsequent-request
                                                          bytes already read.
 
-  `http_parse_request_line()`    Implemented and         Extracts method, target,
-                                 manually exercised      and version; strict
-                                                         grammar and complete
-                                                         malformed-input coverage
-                                                         remain to be verified.
+  `http_parse_request_line()`    Implemented and tested  Extracts method, target,
+                                                         and version via explicit
+                                                         tokenizing; rejects
+                                                         leading whitespace,
+                                                         control characters, extra
+                                                         fields, and maps oversized
+                                                         targets to
+                                                         `HTTP_PARSE_TARGET_TOO_LONG`.
 
-  `http_parse_headers()`         Implemented; six manual Parses bounded header
-                                 cases passed            names/values and rejects
-                                                         malformed headers and
-                                                         excess headers. Full
-                                                         protocol semantics and
-                                                         structured error mapping
-                                                         remain.
+  `http_parse_headers()`         Implemented and tested  Parses bounded header
+                                                         names/values and rejects
+                                                         malformed headers,
+                                                         control characters, and
+                                                         excess headers; returns
+                                                         structured
+                                                         `HttpResult_T` status.
 
   `http_get_header()`            Implemented             Case-insensitive lookup
                                                          returning the first
@@ -106,15 +109,14 @@ listed edge cases have been tested.
                                                          detection must scan all
                                                          headers.
 
-  `http_validate_host()`         Implemented; tests      Checks HTTP/1.0 vs
-                                 pending                 HTTP/1.1 and, for
+  `http_validate_host()`         Implemented and tested  Checks HTTP/1.0 vs
+                                                         HTTP/1.1 and, for
                                                          HTTP/1.1, requires exactly
                                                          one
                                                          non-empty/non-whitespace
-                                                         `Host` value. Full
-                                                         authority syntax
-                                                         validation and proper HTTP
-                                                         error mapping remain.
+                                                         `Host` value. Returns
+                                                         structured `HttpResult_T`
+                                                         status.
 
   `http_send_response()`         Implemented and         Sends a basic `200 OK`
                                  manually exercised      text response with
@@ -170,29 +172,40 @@ listed edge cases have been tested.
                                                          use, useful logs, and
                                                          signal-driven shutdown.
 
-  Automated unit/integration     Not started             Current checks are manual;
-  tests                                                  build assertion-based
-                                                         tests.
+  Automated unit/integration     Implemented for Phase 1 `tests/test_http.c`
+  tests                                                  covers request-line,
+                                                         header, and Host
+                                                         validation; run via
+                                                         `make unit-test`. Framing,
+                                                         router, and JSON coverage
+                                                         remain.
 
   Sanitizers / fuzzing / load    Not started             Add repeatable
   testing / CI                                           verification workflows.
   ---------------------------------------------------------------------------------
 
-### Manual tests completed so far
+### Phase 1 test coverage
 
-The user reports that these six header-parser cases passed:
+`tests/test_http.c` is an assertion-based suite (run with `make
+unit-test`) covering:
 
--   Multiple valid headers.
--   Header-name capitalization is preserved as received.
--   Missing colon is rejected.
--   Empty header name is rejected.
--   Leading/trailing spaces and tabs around a header value are trimmed.
--   Too many headers are rejected.
+-   Valid request lines (`HTTP/1.1` and `HTTP/1.0`).
+-   Malformed request lines: missing version, extra fields, missing
+    CRLF, bare LF, empty line.
+-   Request-line grammar: leading whitespace before the method,
+    control characters in the target, and oversized targets mapped to
+    `HTTP_PARSE_TARGET_TOO_LONG` rather than a generic bad request.
+-   Unsupported/garbage HTTP versions.
+-   Valid headers, case-insensitive lookup, and value trimming.
+-   Malformed headers: missing colon, empty header name, control
+    characters in a value, missing CRLF terminator.
+-   Excess headers rejected once past `HTTP_MAX_HEADERS`.
+-   `http_validate_host()`: missing/duplicate/whitespace-only `Host`
+    for HTTP/1.1, single valid `Host` accepted, and HTTP/1.0 without
+    `Host` accepted.
 
 The basic response was also exercised with `curl -v`, and request
-reception / parsing was manually tested with `nc`. The
-`http_validate_host()` function has been written, but its dedicated test
-matrix still needs to be run.
+reception was manually tested with `nc`.
 
 ## Current implementation details
 
@@ -217,14 +230,16 @@ The current program is a single-connection TCP prototype:
     and HTTP API declarations. Keep the header-name field consistent
     (`key` or `name`) across the struct, parser, lookup, validator, and
     logging code.
--   There is no router, JSON parser, automated unit-test suite, fuzz
-    target, CI configuration, or runtime configuration yet.
+-   There is no router, JSON parser, fuzz target, CI configuration, or
+    runtime configuration yet.
 
-The Makefile provides `compile`, `scompile`, `run`, and `test` targets.
-The `scompile` target enables C11 and common warning flags, but warnings
-are not necessarily treated as errors. The `test` target is a netcat
-smoke request, not an assertion-based test suite, and requires the
-server to be running in another terminal.
+The Makefile provides `compile`, `scompile`, `run`, `test`, and
+`unit-test` targets. The `scompile` target enables C11 and common
+warning flags, but warnings are not necessarily treated as errors. The
+`test` target is a netcat smoke request, not an assertion-based test
+suite, and requires the server to be running in another terminal.
+`unit-test` builds and runs `tests/test_http.c`, the assertion-based
+suite covering Phase 1 request-line, header, and Host validation.
 
 ## Repository layout
 
@@ -239,8 +254,10 @@ server to be running in another terminal.
 │   ├── http.c         # Receive, parsing, lookup, Host validation, response
 │   ├── main.c         # Single-client server flow
 │   └── server.c       # IPv4 socket setup, bind/listen/accept
+├── tests/
+│   └── test_http.c    # Phase 1 unit tests (request line, headers, Host)
 ├── output/            # Local compiled executable (ignored by Git)
-├── Makefile           # Build/run/smoke-test targets
+├── Makefile           # Build/run/smoke-test/unit-test targets
 └── README.md
 ```
 
@@ -284,7 +301,7 @@ This is the intended sequence of APIs and behavior to implement to
 approach HTTP/1.1 readiness. Names are proposed where the API does not
 exist yet; adjust names to match the project's conventions.
 
-### Phase 1 --- Request validation
+### Phase 1 --- Request validation (complete)
 
 -   [x] `http_receive_request()` --- bounded initial request reception.
 -   [x] `http_parse_request_line()` --- parse method, target, and
@@ -295,11 +312,11 @@ exist yet; adjust names to match the project's conventions.
     matching field.
 -   [x] `http_validate_host()` --- basic HTTP/1.0/1.1 Host
     presence/uniqueness/empty-value checks; **dedicated tests pending**.
--   [ ] Add tests for valid/missing/duplicate/empty/whitespace-only
+-   [x] Add tests for valid/missing/duplicate/empty/whitespace-only
     `Host` fields and unsupported versions.
--   [ ] Add complete request-line, header grammar, CRLF,
+-   [x] Add complete request-line, header grammar, CRLF,
     control-character, and length/count boundary tests.
--   [ ] Return structured parser/validation errors so the server can
+-   [x] Return structured parser/validation errors so the server can
     send deliberate HTTP responses.
 
 ### Phase 2 --- Framing and request-body I/O
