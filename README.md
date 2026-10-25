@@ -209,27 +209,35 @@ reception was manually tested with `nc`.
 
 ## Current implementation details
 
-The current program is a single-connection TCP prototype:
+The current program accepts clients in a loop, handling one HTTP
+exchange per connection:
 
--   `src/server.c` creates an IPv4 TCP listening socket on
+-   `src/net/socket.c` creates an IPv4 TCP listening socket on
     `0.0.0.0:8000`, enables `SO_REUSEADDR`, binds, listens, and accepts
-    one client.
--   `src/main.c` accepts one connection, receives a request, parses the
-    request line and headers, prints parsed data, sends one response,
-    then closes both sockets and exits.
--   `src/http.c` contains request reception, request-line parsing,
-    header parsing, header lookup, Host validation, and basic response
-    sending.
+    client connections.
+-   `src/main.c` is the process entry point: it sets up the server
+    socket, then loops forever accepting a client, handing it to
+    `handle_connection()`, and closing it. It has no HTTP-protocol
+    knowledge of its own.
+-   `src/server/connection.c` runs one request/response cycle on an
+    already-accepted client socket: receive, parse the request line,
+    parse the headers, look up `Host`, send the response.
+-   `src/http/` splits request handling by responsibility:
+    `response.c` (receive/send wire I/O), `parser.c` (request-line and
+    header parsing), `headers.c` (header lookup), `host.c` (Host
+    validation), `status.c` (parse-status to HTTP-status mapping).
 -   `http_receive_request()` may read beyond `\r\n\r\n` into the same
     buffer. Future body/framing code must not discard those extra bytes.
 -   The response is currently a basic `200 OK` plain-text response with
     `Connection: close`; it is not selected by method or path.
--   `include/config.h` currently sets port `8000` and listen backlog
-    `10`.
--   `include/http.h` defines the `HttpRequest` / `HttpHeader` structures
-    and HTTP API declarations. Keep the header-name field consistent
-    (`key` or `name`) across the struct, parser, lookup, validator, and
-    logging code.
+-   Each accepted connection is still a fresh TCP connection handling
+    exactly one request; there is no HTTP keep-alive or pipelining yet
+    (Phase 3).
+-   `include/core/config.h` currently sets port `8000` and listen
+    backlog `10`.
+-   `include/http/request.h` defines the `HttpRequest` / `HttpHeader`
+    structures and the buffer-size macros every parser enforces
+    against them.
 -   There is no router, JSON parser, fuzz target, CI configuration, or
     runtime configuration yet.
 
@@ -241,29 +249,79 @@ suite, and requires the server to be running in another terminal.
 `unit-test` builds and runs `tests/test_http.c`, the assertion-based
 suite covering Phase 1 request-line, header, and Host validation.
 
-## Repository layout
+## Code style and documentation
+
+-   **Formatting:** C source is formatted with the Google C/C++ style
+    (`clang-format -style=google`), 2-space indentation, 80-column
+    guideline. Run it on changed files before committing.
+-   **Naming:** `snake_case` for functions and variables,
+    `UpperCamelCase` with a `_T` suffix for typedef'd types
+    (`HttpResult_T`), `UPPER_SNAKE_CASE` for macros/constants.
+-   **File-level comments:** every `.h`/`.c` file opens with a short
+    block comment describing what the file is responsible for — not a
+    changelog, not a restatement of every function, just the single
+    responsibility the file exists to cover.
+-   **Function-level comments:** every function declared in a header
+    gets a Doxygen-style comment (`@brief`, `@param`, `@return`) at its
+    declaration; the matching `.c` definition is not re-commented.
+    Static helpers local to a single `.c` file are documented the same
+    way at their definition, since they have no header declaration.
+-   **No inline narration:** avoid one-line comments scattered through
+    function bodies explaining *what* a line does — well-named
+    variables and functions should make that unnecessary. A comment
+    earns its place only when it explains a non-obvious *why* (a
+    workaround, an invariant, a spec citation).
+-   **One responsibility per file:** a `.c` file implements one
+    cohesive piece of behavior (e.g. "request-line and header
+    parsing", "Host validation") and its paired `.h` declares exactly
+    that file's public API — not a catch-all declaring everything the
+    module happens to contain. Internal helpers (e.g. `trim()` in
+    `parser.c`) stay `static` and undeclared in any header.
+
+## Project structure
 
 ``` text
 .
 ├── include/
-│   ├── config.h       # Port and backlog constants
-│   ├── errors.h       # Current process/function status constants
-│   ├── http.h         # Request structures and HTTP API declarations
-│   └── server.h       # Socket API declarations
+│   ├── core/
+│   │   ├── config.h        # Port and backlog constants
+│   │   └── errors.h        # Process/function status constants
+│   ├── net/
+│   │   └── socket.h        # Socket lifecycle API (create/bind/listen/accept)
+│   ├── http/
+│   │   ├── status.h        # HttpParseStatus_T, HttpResult_T, status mapping
+│   │   ├── request.h       # HttpRequest / HttpHeader structs and size macros
+│   │   ├── parser.h        # Request-line and header parsing API
+│   │   ├── headers.h       # Header lookup API
+│   │   ├── host.h          # Host-header validation API
+│   │   └── response.h      # Request reception / response sending API
+│   └── server/
+│       └── connection.h    # Per-connection request/response cycle API
 ├── src/
-│   ├── http.c         # Receive, parsing, lookup, Host validation, response
-│   ├── main.c         # Single-client server flow
-│   └── server.c       # IPv4 socket setup, bind/listen/accept
+│   ├── net/
+│   │   └── socket.c
+│   ├── http/
+│   │   ├── status.c
+│   │   ├── parser.c        # Includes internal trim()/http_is_token_char() helpers
+│   │   ├── headers.c
+│   │   ├── host.c
+│   │   └── response.c
+│   ├── server/
+│   │   └── connection.c
+│   └── main.c               # Entry point: socket setup + accept loop
 ├── tests/
-│   └── test_http.c    # Phase 1 unit tests (request line, headers, Host)
-├── output/            # Local compiled executable (ignored by Git)
-├── Makefile           # Build/run/smoke-test/unit-test targets
+│   └── test_http.c         # Phase 1 unit tests (request line, headers, Host)
+├── output/                 # Local compiled executable (ignored by Git)
+├── Makefile                # Build/run/smoke-test/unit-test targets
 └── README.md
 ```
 
-As the implementation grows, keep modules focused. Likely future modules
-include framing/I/O, routing, JSON, and automated tests rather than
-expanding the current source files into one large implementation.
+Each module (`net/`, `http/`, `server/`) mirrors between `include/` and
+`src/`: a `.c` file's declarations live at the same relative path under
+`include/`, included as `"http/parser.h"` etc. (the compiler's include
+path is `include/`, set via `-Iinclude`). As the implementation grows,
+keep this one-file-one-responsibility pattern rather than letting any
+single file accumulate unrelated concerns again.
 
 ## Build and run the current prototype
 
