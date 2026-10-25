@@ -46,7 +46,7 @@ static int http_is_token_char(unsigned char c) {
 }
 
 HttpResult_T http_parse_request_line(const char* buffer, size_t request_length,
-                                     HttpRequest* request) {
+                                     HttpRequest_T* request) {
   if (buffer == NULL || request == NULL || request_length == 0 ||
       request_length > HTTP_MAX_REQUEST_SIZE) {
     return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
@@ -128,7 +128,7 @@ HttpResult_T http_parse_request_line(const char* buffer, size_t request_length,
 }
 
 HttpResult_T http_parse_headers(const char* buffer, size_t request_length,
-                                HttpRequest* request) {
+                                HttpRequest_T* request) {
   if (buffer == NULL || request == NULL || request_length == 0 ||
       request_length > HTTP_MAX_REQUEST_SIZE) {
     return get_result_from_status(HTTP_PARSE_BAD_REQUEST);

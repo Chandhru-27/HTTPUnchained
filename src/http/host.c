@@ -9,7 +9,7 @@
 #include "http/headers.h"
 #include "http/status.h"
 
-HttpResult_T http_validate_host(const HttpRequest* request) {
+HttpResult_T http_validate_host(const HttpRequest_T* request) {
   if (request == NULL || request->header_count > HTTP_MAX_HEADERS) {
     return get_result_from_status(HTTP_PARSE_BAD_REQUEST);
   }

@@ -1,6 +1,6 @@
 /**
  * Parsing of the raw request-line and header bytes received from a
- * client into a validated HttpRequest. Both functions assume `buffer`
+ * client into a validated HttpRequest_T. Both functions assume `buffer`
  * holds at least one full request (as produced by
  * http_receive_request()) and only inspect the first `request_length`
  * bytes.
@@ -25,7 +25,7 @@
  *         on failure.
  */
 HttpResult_T http_parse_request_line(const char* buffer, size_t request_length,
-                                     HttpRequest* request);
+                                     HttpRequest_T* request);
 
 /**
  * @brief Parse the header section following the request line into
@@ -38,6 +38,6 @@ HttpResult_T http_parse_request_line(const char* buffer, size_t request_length,
  *         HTTP_PARSE_HEADERS_TOO_LARGE on failure.
  */
 HttpResult_T http_parse_headers(const char* buffer, size_t request_length,
-                                HttpRequest* request);
+                                HttpRequest_T* request);
 
 #endif

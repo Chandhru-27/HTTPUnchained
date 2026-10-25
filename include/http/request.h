@@ -1,5 +1,5 @@
 /**
- * The HttpRequest/HttpHeader data model and the fixed-size bounds every
+ * The HttpRequest_T/HttpHeader_T data model and the fixed-size bounds every
  * parser enforces against it. These sizes bound memory use per request
  * and are the single source of truth for buffer limits elsewhere.
  */
@@ -20,7 +20,7 @@
 typedef struct {
   char key[HTTP_MAX_HEADER_KEY_SIZE];
   char value[HTTP_MAX_HEADER_VALUE_SIZE];
-} HttpHeader;
+} HttpHeader_T;
 
 typedef struct {
   char method[HTTP_MAX_METHOD_SIZE];
@@ -28,7 +28,7 @@ typedef struct {
   char version[HTTP_MAX_VERSION_SIZE];
 
   size_t header_count;
-  HttpHeader headers[HTTP_MAX_HEADERS];
-} HttpRequest;
+  HttpHeader_T headers[HTTP_MAX_HEADERS];
+} HttpRequest_T;
 
 #endif

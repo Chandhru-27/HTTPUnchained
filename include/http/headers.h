@@ -1,5 +1,5 @@
 /**
- * Lookup helpers over an already-parsed HttpRequest's headers.
+ * Lookup helpers over an already-parsed HttpRequest_T's headers.
  */
 #ifndef HTTP_HEADERS_H
 #define HTTP_HEADERS_H
@@ -14,6 +14,6 @@
  *         duplicate-sensitive caller needs to scan all headers
  *         directly.
  */
-const char* http_get_header(const HttpRequest* request, const char* key);
+const char* http_get_header(const HttpRequest_T* request, const char* key);
 
 #endif

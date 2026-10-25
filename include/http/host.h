@@ -15,6 +15,6 @@
  * @return HTTP_PARSE_OK on success; HTTP_PARSE_BAD_REQUEST or
  *         HTTP_PARSE_VERSION_UNSUPPORTED on failure.
  */
-HttpResult_T http_validate_host(const HttpRequest* request);
+HttpResult_T http_validate_host(const HttpRequest_T* request);
 
 #endif

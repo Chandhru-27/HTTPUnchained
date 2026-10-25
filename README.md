@@ -235,7 +235,7 @@ exchange per connection:
     (Phase 3).
 -   `include/core/config.h` currently sets port `8000` and listen
     backlog `10`.
--   `include/http/request.h` defines the `HttpRequest` / `HttpHeader`
+-   `include/http/request.h` defines the `HttpRequest_T` / `HttpHeader_T`
     structures and the buffer-size macros every parser enforces
     against them.
 -   There is no router, JSON parser, fuzz target, CI configuration, or
@@ -290,7 +290,7 @@ suite covering Phase 1 request-line, header, and Host validation.
 │   │   └── socket.h        # Socket lifecycle API (create/bind/listen/accept)
 │   ├── http/
 │   │   ├── status.h        # HttpParseStatus_T, HttpResult_T, status mapping
-│   │   ├── request.h       # HttpRequest / HttpHeader structs and size macros
+│   │   ├── request.h       # HttpRequest_T / HttpHeader_T structs and size macros
 │   │   ├── parser.h        # Request-line and header parsing API
 │   │   ├── headers.h       # Header lookup API
 │   │   ├── host.h          # Host-header validation API

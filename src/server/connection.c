@@ -22,7 +22,7 @@ int handle_connection(int clientsock_fd) {
     return STATUS_FATAL_ERROR;
   }
 
-  HttpRequest request = {0};
+  HttpRequest_T request = {0};
   if (http_parse_request_line(raw_request, request_length, &request).status !=
       HTTP_PARSE_OK) {
     return STATUS_FATAL_ERROR;

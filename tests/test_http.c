@@ -26,30 +26,30 @@ static int tests_failed = 0;
     }                                                 \
   } while (0)
 
-static HttpParseStatus_T parse_line(const char* input, HttpRequest* request) {
+static HttpParseStatus_T parse_line(const char* input, HttpRequest_T* request) {
   return http_parse_request_line(input, strlen(input), request).status;
 }
 
 static HttpParseStatus_T parse_headers(const char* input,
-                                       HttpRequest* request) {
+                                       HttpRequest_T* request) {
   return http_parse_headers(input, strlen(input), request).status;
 }
 
 static void test_request_line_valid(void) {
-  HttpRequest r = {0};
+  HttpRequest_T r = {0};
   CHECK("GET / HTTP/1.1 parses ok",
         parse_line("GET / HTTP/1.1\r\n", &r) == HTTP_PARSE_OK);
   CHECK("method captured", strcmp(r.method, "GET") == 0);
   CHECK("target captured", strcmp(r.target, "/") == 0);
   CHECK("version captured", strcmp(r.version, "HTTP/1.1") == 0);
 
-  HttpRequest r2 = {0};
+  HttpRequest_T r2 = {0};
   CHECK("HTTP/1.0 accepted",
         parse_line("POST /submit HTTP/1.0\r\n", &r2) == HTTP_PARSE_OK);
 }
 
 static void test_request_line_malformed(void) {
-  HttpRequest r = {0};
+  HttpRequest_T r = {0};
   CHECK("missing version is bad request",
         parse_line("GET /\r\n", &r) == HTTP_PARSE_BAD_REQUEST);
 
@@ -67,15 +67,15 @@ static void test_request_line_malformed(void) {
 }
 
 static void test_request_line_grammar(void) {
-  HttpRequest r = {0};
+  HttpRequest_T r = {0};
   CHECK("leading whitespace before method rejected",
         parse_line(" GET / HTTP/1.1\r\n", &r) == HTTP_PARSE_BAD_REQUEST);
 
-  HttpRequest r2 = {0};
+  HttpRequest_T r2 = {0};
   CHECK("control character in target rejected",
         parse_line("GET /\x01 HTTP/1.1\r\n", &r2) == HTTP_PARSE_BAD_REQUEST);
 
-  HttpRequest r3 = {0};
+  HttpRequest_T r3 = {0};
   char long_target[HTTP_MAX_TARGET_SIZE + 100];
   long_target[0] = '/';
   memset(long_target + 1, 'a', sizeof(long_target) - 2);
@@ -90,17 +90,17 @@ static void test_request_line_grammar(void) {
 }
 
 static void test_request_line_version(void) {
-  HttpRequest r = {0};
+  HttpRequest_T r = {0};
   CHECK("unsupported version rejected",
         parse_line("GET / HTTP/2.0\r\n", &r) == HTTP_PARSE_VERSION_UNSUPPORTED);
 
-  HttpRequest r2 = {0};
+  HttpRequest_T r2 = {0};
   CHECK("garbage version rejected",
         parse_line("GET / FOO\r\n", &r2) == HTTP_PARSE_VERSION_UNSUPPORTED);
 }
 
 static void test_headers_valid(void) {
-  HttpRequest r = {0};
+  HttpRequest_T r = {0};
   const char* input =
       "GET / HTTP/1.1\r\n"
       "Host: example.com\r\n"
@@ -118,22 +118,22 @@ static void test_headers_valid(void) {
 }
 
 static void test_headers_malformed(void) {
-  HttpRequest r = {0};
+  HttpRequest_T r = {0};
   CHECK("missing colon rejected",
         parse_headers("GET / HTTP/1.1\r\nHostexample.com\r\n\r\n", &r) ==
             HTTP_PARSE_BAD_REQUEST);
 
-  HttpRequest r2 = {0};
+  HttpRequest_T r2 = {0};
   CHECK("empty header name rejected",
         parse_headers("GET / HTTP/1.1\r\n: value\r\n\r\n", &r2) ==
             HTTP_PARSE_BAD_REQUEST);
 
-  HttpRequest r3 = {0};
+  HttpRequest_T r3 = {0};
   CHECK("control character in value rejected",
         parse_headers("GET / HTTP/1.1\r\nX: bad\x01value\r\n\r\n", &r3) ==
             HTTP_PARSE_BAD_REQUEST);
 
-  HttpRequest r4 = {0};
+  HttpRequest_T r4 = {0};
   CHECK("header line without CRLF terminator rejected",
         parse_headers("GET / HTTP/1.1\r\nHost: example.com", &r4) ==
             HTTP_PARSE_BAD_REQUEST);
@@ -148,18 +148,18 @@ static void test_headers_limits(void) {
   }
   strcat(input, "\r\n");
 
-  HttpRequest r = {0};
+  HttpRequest_T r = {0};
   CHECK("too many headers rejected",
         parse_headers(input, &r) == HTTP_PARSE_HEADERS_TOO_LARGE);
 }
 
 static void test_validate_host(void) {
-  HttpRequest r = {0};
+  HttpRequest_T r = {0};
   strcpy(r.version, "HTTP/1.1");
   CHECK("http/1.1 missing host rejected",
         http_validate_host(&r).status == HTTP_PARSE_BAD_REQUEST);
 
-  HttpRequest r2 = {0};
+  HttpRequest_T r2 = {0};
   strcpy(r2.version, "HTTP/1.1");
   strcpy(r2.headers[0].key, "Host");
   strcpy(r2.headers[0].value, "example.com");
@@ -167,7 +167,7 @@ static void test_validate_host(void) {
   CHECK("http/1.1 single host accepted",
         http_validate_host(&r2).status == HTTP_PARSE_OK);
 
-  HttpRequest r3 = {0};
+  HttpRequest_T r3 = {0};
   strcpy(r3.version, "HTTP/1.1");
   strcpy(r3.headers[0].key, "Host");
   strcpy(r3.headers[0].value, "example.com");
@@ -177,7 +177,7 @@ static void test_validate_host(void) {
   CHECK("http/1.1 duplicate host rejected",
         http_validate_host(&r3).status == HTTP_PARSE_BAD_REQUEST);
 
-  HttpRequest r4 = {0};
+  HttpRequest_T r4 = {0};
   strcpy(r4.version, "HTTP/1.1");
   strcpy(r4.headers[0].key, "Host");
   strcpy(r4.headers[0].value, "   ");
@@ -185,7 +185,7 @@ static void test_validate_host(void) {
   CHECK("http/1.1 whitespace-only host rejected",
         http_validate_host(&r4).status == HTTP_PARSE_BAD_REQUEST);
 
-  HttpRequest r5 = {0};
+  HttpRequest_T r5 = {0};
   strcpy(r5.version, "HTTP/1.0");
   CHECK("http/1.0 missing host accepted",
         http_validate_host(&r5).status == HTTP_PARSE_OK);

@@ -6,7 +6,7 @@
 
 #include <strings.h>
 
-const char* http_get_header(const HttpRequest* request, const char* key) {
+const char* http_get_header(const HttpRequest_T* request, const char* key) {
   if (request == NULL || key == NULL || key[0] == '\0') return NULL;
 
   size_t size = request->header_count;
